@@ -61,13 +61,17 @@ function fillCircle(
   ctx: CanvasRenderingContext2D,
   center: Vector2D,
   radius: number
-) {
+): void {
   ctx.beginPath();
   ctx.arc(...center.coordsToArray(), radius, 0, 2 * Math.PI);
   ctx.fill();
 }
 
-function strokeLine(ctx: CanvasRenderingContext2D, p1: Vector2D, p2: Vector2D) {
+function strokeLine(
+  ctx: CanvasRenderingContext2D,
+  p1: Vector2D,
+  p2: Vector2D
+): void {
   ctx.beginPath();
   ctx.moveTo(...p1.coordsToArray());
   ctx.lineTo(...p2.coordsToArray());
@@ -88,7 +92,7 @@ function hittingCell(p1: Vector2D, p2: Vector2D): Vector2D {
   );
 }
 
-function rayStep(p1: Vector2D, p2: Vector2D) {
+function rayStep(p1: Vector2D, p2: Vector2D): Vector2D {
   // find the slop of the ray-casted line
   const delta = p2.subtract(p1);
 
@@ -137,7 +141,7 @@ function drawGrid(
   position: Vector2D,
   size: Vector2D,
   scene: Scene
-) {
+): void {
   // reset context to its default state each time its rendered
   ctx.reset();
 
@@ -173,14 +177,18 @@ function drawGrid(
   // orange
   const lineStrokeColor = "#ea250c";
 
+  //purple
+  const lineStrokeColor2 = "#d946ef";
+
   ctx.fillStyle = lineStrokeColor;
   fillCircle(ctx, p1, 0.2);
 
   // client has moved mouse if `p2 !== undefined`
   if (p2 !== undefined) {
     for (;;) {
-      fillCircle(ctx, p2, 0.2);
-      ctx.strokeStyle = lineStrokeColor;
+      ctx.fillStyle = lineStrokeColor2;
+      fillCircle(ctx, p2, 0.1);
+      ctx.strokeStyle = lineStrokeColor2;
       strokeLine(ctx, p1, p2);
 
       const c = hittingCell(p1, p2);
@@ -206,10 +214,10 @@ function drawGrid(
 // immediately call this fxn when the html element has been rendered
 (() => {
   let scene = [
-    [0, 0, 1, 1, 0, 0, 0],
     [0, 0, 0, 1, 0, 0, 0],
-    [0, 1, 1, 1, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 1, 0, 0, 0, 0],
+    [0, 1, 0, 0, 0, 0, 0],
+    [1, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0],
@@ -255,6 +263,7 @@ function drawGrid(
   //       break;
   //   }
   // });
+
   let p1 = sceneSize(scene).multiply(new Vector2D(0.7, 0.93));
   let p2: Vector2D | undefined = undefined;
   let minimapPosition = Vector2D.zero();

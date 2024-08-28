@@ -128,13 +128,16 @@ function drawGrid(ctx, p1, p2, position, size, scene) {
     }
     // orange
     const lineStrokeColor = "#ea250c";
+    //purple
+    const lineStrokeColor2 = "#d946ef";
     ctx.fillStyle = lineStrokeColor;
     fillCircle(ctx, p1, 0.2);
     // client has moved mouse if `p2 !== undefined`
     if (p2 !== undefined) {
         for (;;) {
-            fillCircle(ctx, p2, 0.2);
-            ctx.strokeStyle = lineStrokeColor;
+            ctx.fillStyle = lineStrokeColor2;
+            fillCircle(ctx, p2, 0.1);
+            ctx.strokeStyle = lineStrokeColor2;
             strokeLine(ctx, p1, p2);
             const c = hittingCell(p1, p2);
             // dont render past grid boundaries
@@ -154,10 +157,10 @@ function drawGrid(ctx, p1, p2, position, size, scene) {
 // immediately call this fxn when the html element has been rendered
 (() => {
     let scene = [
-        [0, 0, 1, 1, 0, 0, 0],
         [0, 0, 0, 1, 0, 0, 0],
-        [0, 1, 1, 1, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 1, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0],
