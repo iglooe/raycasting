@@ -1,12 +1,24 @@
 "use strict";
+// global constants
+const EPSILON = 1e-6; // small value to avoid floating-point precision issues
+const NEAR_CLIPPING_PLANE = 1; // distance to the near clipping plane
+const FAR_CLIPPING_PLANE = 10; // distance to the far clipping plane
+const FOV = Math.PI * 0.5; // field of view in radians (90 degrees)
+const SCREEN_WIDTH = 200; // number of vertical strips to render
+const PLAYER_STEP_LEN = 0.5; // player movement step length
 class Vector2D {
     constructor(x, y) {
         this.x = x;
         this.y = y;
     }
+    // static methods for creating vectors
     static zero() {
         return new Vector2D(0, 0);
     }
+    static fromAngle(angle) {
+        return new Vector2D(Math.cos(angle), Math.sin(angle));
+    }
+    // vector arithmetic methods
     add(that) {
         return new Vector2D(this.x + that.x, this.y + that.y);
     }
@@ -19,11 +31,15 @@ class Vector2D {
     divide(that) {
         return new Vector2D(this.x / that.x, this.y / that.y);
     }
+    // vector operations
     length() {
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
     scale(value) {
         return new Vector2D(this.x * value, this.y * value);
+    }
+    rotate90() {
+        return new Vector2D(-this.y, this.x);
     }
     distanceTo(that) {
         return that.subtract(this).length();
@@ -34,12 +50,19 @@ class Vector2D {
             return new Vector2D(0, 0);
         return new Vector2D(this.x / l, this.y / l);
     }
-    // converts the client mouse position on the canvas to an array
+    // linear interpolation between two vectors
+    lerp(that, t) {
+        return that.subtract(this).scale(t).add(this);
+    }
+    dot(that) {
+        return this.x * that.x + this.y * that.y;
+    }
+    // converts the vector to an array for use with canvas methods
     coordsToArray() {
         return [this.x, this.y];
     }
 }
-const EPSILON = 1e-3;
+// helper functions for canvas operations
 function canvasSize(ctx) {
     return new Vector2D(ctx.canvas.width, ctx.canvas.height);
 }
@@ -54,6 +77,7 @@ function strokeLine(ctx, p1, p2) {
     ctx.lineTo(...p2.coordsToArray());
     ctx.stroke();
 }
+// helper functions for raycasting calculations
 function snapToNeighbor(x, dx) {
     if (dx > 0)
         return Math.ceil(x + Math.sign(dx) * EPSILON);
@@ -65,6 +89,7 @@ function hittingCell(p1, p2) {
     const delta = p2.subtract(p1);
     return new Vector2D(Math.floor(p2.x + Math.sign(delta.x) * EPSILON), Math.floor(p2.y + Math.sign(delta.y) * EPSILON));
 }
+// calculate the next step in the ray's path
 function rayStep(p1, p2) {
     // find the slop of the ray-casted line
     const delta = p2.subtract(p1);
@@ -92,6 +117,23 @@ function rayStep(p1, p2) {
     }
     return p3;
 }
+// check if a point is inside the scene
+function insideScene(scene, p) {
+    const size = sceneSize(scene);
+    return 0 <= p.x && p.x < size.x && 0 <= p.y && p.y < size.y;
+}
+// cast a ray from p1 to p2 in the scene
+function castRay(scene, p1, p2) {
+    for (;;) {
+        const c = hittingCell(p1, p2);
+        if (!insideScene(scene, c) || scene[c.y][c.x] !== null)
+            break;
+        const p3 = rayStep(p1, p2);
+        p1 = p2;
+        p2 = p3;
+    }
+    return p2;
+}
 function sceneSize(scene) {
     const y = scene.length;
     let x = Number.MIN_VALUE;
@@ -100,119 +142,155 @@ function sceneSize(scene) {
     }
     return new Vector2D(x, y);
 }
-function drawGrid(ctx, p1, p2, position, size, scene) {
+function renderMinimap(ctx, player, position, size, scene) {
     // reset context to its default state each time its rendered
-    ctx.reset();
-    // canvas background properties
-    ctx.fillStyle = "#181818";
-    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.save();
     const gridSize = sceneSize(scene);
     ctx.translate(...position.coordsToArray());
     ctx.scale(...size.divide(gridSize).coordsToArray());
+    // draw the background and grid
     ctx.strokeStyle = "#303030";
-    ctx.lineWidth = 0.02;
+    ctx.fillStyle = "#181818";
+    ctx.fillRect(0, 0, ...gridSize.coordsToArray());
+    ctx.lineWidth = 0.1;
+    // draw the cells
     for (let y = 0; y < gridSize.y; ++y) {
         for (let x = 0; x < gridSize.x; ++x) {
-            if (scene[y][x] !== 0) {
-                ctx.fillStyle = "#303030";
+            const color = scene[y][x];
+            if (color !== null) {
+                ctx.fillStyle = color;
                 ctx.fillRect(x, y, 1, 1);
             }
         }
     }
     // draw the grid as a set of vectors
     for (let x = 0; x <= gridSize.x; ++x) {
-        strokeLine(ctx, new Vector2D(x, 0), new Vector2D(x, gridSize.x));
+        strokeLine(ctx, new Vector2D(x, 0), new Vector2D(x, gridSize.y));
     }
     for (let y = 0; y <= gridSize.y; ++y) {
-        strokeLine(ctx, new Vector2D(0, y), new Vector2D(gridSize.y, y));
+        strokeLine(ctx, new Vector2D(0, y), new Vector2D(gridSize.x, y));
     }
-    // orange
+    // draw the player
     const lineStrokeColor = "#ea250c";
-    //purple
-    const lineStrokeColor2 = "#d946ef";
     ctx.fillStyle = lineStrokeColor;
-    fillCircle(ctx, p1, 0.2);
-    // client has moved mouse if `p2 !== undefined`
-    if (p2 !== undefined) {
-        for (;;) {
-            ctx.fillStyle = lineStrokeColor2;
-            fillCircle(ctx, p2, 0.1);
-            ctx.strokeStyle = lineStrokeColor2;
-            strokeLine(ctx, p1, p2);
-            const c = hittingCell(p1, p2);
-            // dont render past grid boundaries
-            if (c.x < 0 ||
-                c.x >= gridSize.x + 1 ||
-                c.y < 0 ||
-                c.y >= gridSize.y ||
-                scene[c.y][c.x] === 1) {
-                break;
+    ctx.strokeStyle = lineStrokeColor;
+    fillCircle(ctx, player.position, 0.2);
+    // draw the FOV
+    const [p1, p2] = player.fovRange();
+    strokeLine(ctx, p1, p2);
+    strokeLine(ctx, player.position, p1);
+    strokeLine(ctx, player.position, p2);
+    ctx.restore();
+}
+// player class to handle player position and direction
+class Player {
+    constructor(position, direction) {
+        this.position = position;
+        this.direction = direction;
+    }
+    // calculate the range of the player's field of view
+    fovRange() {
+        const l = Math.tan(FOV * 0.5) * NEAR_CLIPPING_PLANE;
+        const p = this.position.add(Vector2D.fromAngle(this.direction).scale(NEAR_CLIPPING_PLANE));
+        let p1 = p.subtract(p.subtract(this.position).rotate90().normalize().scale(l));
+        let p2 = p.add(p.subtract(this.position).rotate90().normalize().scale(l));
+        return [p1, p2];
+    }
+}
+// render the 3D scene using raycasting
+function renderScene(ctx, player, scene) {
+    const strip_width = Math.ceil(ctx.canvas.width / SCREEN_WIDTH);
+    const [r1, r2] = player.fovRange();
+    for (let x = 0; x < SCREEN_WIDTH; ++x) {
+        const p = castRay(scene, player.position, r1.lerp(r2, x / SCREEN_WIDTH));
+        const c = hittingCell(player.position, p);
+        if (insideScene(scene, c)) {
+            const color = scene[c.y][c.x];
+            if (color !== null) {
+                const v = p.subtract(player.position);
+                const d = Vector2D.fromAngle(player.direction);
+                let strip_height = ctx.canvas.height / v.dot(d);
+                ctx.fillStyle = color;
+                ctx.fillRect(x * strip_width, (ctx.canvas.height - strip_height) * 0.5, strip_width, strip_height);
             }
-            const p3 = rayStep(p1, p2);
-            p1 = p2;
-            p2 = p3;
         }
     }
 }
-// immediately call this fxn when the html element has been rendered
+// main rendering function
+function renderGame(ctx, player, scene) {
+    const minimapPosition = Vector2D.zero().add(canvasSize(ctx).scale(0.03));
+    const cellSize = ctx.canvas.width * 0.03;
+    const minimapSize = sceneSize(scene).scale(cellSize);
+    // clear the canvas
+    ctx.fillStyle = "#181818";
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    // render the 3d scene and minimap
+    renderScene(ctx, player, scene);
+    renderMinimap(ctx, player, minimapPosition, minimapSize, scene);
+}
+// immediately call this function when the html element has been rendered
 (() => {
-    let scene = [
-        [0, 0, 0, 1, 0, 0, 0],
-        [0, 0, 1, 0, 0, 0, 0],
-        [0, 1, 0, 0, 0, 0, 0],
-        [1, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0],
-    ];
     const game = document.getElementById("game");
     if (game === null) {
         throw new Error("No canvas element found with id `game`.");
     }
-    // canvas properties
-    game.width = 800;
-    game.height = 800;
+    // set canvas size
+    const factor = 50;
+    game.width = 16 * factor;
+    game.height = 9 * factor;
     // disable right click context menu
     game.oncontextmenu = function (event) {
         event.preventDefault();
         event.stopPropagation();
     };
     const ctx = game.getContext("2d");
-    if (ctx === null) {
+    if (ctx === null)
         throw new Error("2D context is not supported.");
-    }
-    // todo:
-    // document.addEventListener("keydown", (event: KeyboardEvent) => {
-    //   switch (event.key.toLowerCase()) {
-    //     case "w":
-    //       console.log("W key pressed");
-    //       break;
-    //     case "a":
-    //       console.log("A key pressed");
-    //       break;
-    //     case "s":
-    //       console.log("S key pressed");
-    //       break;
-    //     case "d":
-    //       console.log("D key pressed");
-    //       break;
-    //     // do nothing
-    //     default:
-    //       break;
-    //   }
-    // });
-    let p1 = sceneSize(scene).multiply(new Vector2D(0.7, 0.93));
-    let p2 = undefined;
-    let minimapPosition = Vector2D.zero();
-    let minimapSize = canvasSize(ctx);
-    game.addEventListener("mousemove", (event) => {
-        p2 = new Vector2D(event.offsetX, event.offsetY)
-            .subtract(minimapPosition)
-            .divide(minimapSize)
-            .multiply(sceneSize(scene));
-        // redraw the grid each time the mouse moves
-        drawGrid(ctx, p1, p2, minimapPosition, minimapSize, scene);
+    // prettier-ignore
+    // define the scene
+    const scene = [
+        [null, null, "cyan", "purple", null, null, null, null],
+        [null, null, null, "yellow", null, null, null, null],
+        [null, "red", "green", "blue", null, null, null, null],
+        [null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null],
+        [null, null, null, null, null, null, null, null],
+    ];
+    // define the player, at its initial start
+    const player = new Player(sceneSize(scene).multiply(new Vector2D(0.63, 0.63)), Math.PI * 1.25);
+    // handle keyboard input
+    // prettier-ignore
+    window.addEventListener("keydown", (event) => {
+        if (!event.repeat) {
+            switch (event.code) {
+                case "KeyW":
+                    {
+                        player.position = player.position.add(Vector2D.fromAngle(player.direction).scale(PLAYER_STEP_LEN));
+                        renderGame(ctx, player, scene);
+                    }
+                    break;
+                case "KeyA":
+                    {
+                        player.direction -= Math.PI * 0.1;
+                        renderGame(ctx, player, scene);
+                    }
+                    break;
+                case "KeyS":
+                    {
+                        player.position = player.position.subtract(Vector2D.fromAngle(player.direction).scale(PLAYER_STEP_LEN));
+                        renderGame(ctx, player, scene);
+                    }
+                    break;
+                case "KeyD":
+                    {
+                        player.direction += Math.PI * 0.1;
+                        renderGame(ctx, player, scene);
+                    }
+                    break;
+            }
+        }
     });
-    // draw initial grid
-    drawGrid(ctx, p1, p2, minimapPosition, minimapSize, scene);
+    // initial render
+    renderGame(ctx, player, scene);
 })();
