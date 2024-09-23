@@ -7,6 +7,50 @@ const SCREEN_WIDTH = 200; // number of vertical strips to render
 const PLAYER_STEP_LEN = 0.5; // player movement step length
 const PLAYER_SPEED = 2;
 
+class Color {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+
+  constructor(r: number, g: number, b: number, a: number) {
+    this.r = r;
+    this.g = g;
+    this.b = b;
+    this.a = a;
+  }
+  static red(): Color {
+    return new Color(1, 0, 0, 1)
+  }
+  static green(): Color {
+    return new Color(0, 1, 0, 1)
+  }
+  static blue(): Color {
+    return new Color(0, 0, 1, 1)
+  }
+  static yellow(): Color {
+    return new Color(1, 1, 0, 1)
+  }
+  static purple(): Color {
+    return new Color(1, 0, 1, 1)
+  }
+  static cyan(): Color {
+    return new Color(0, 1, 1, 1)
+  }
+
+  brightness(factor: number): Color {
+    return new Color(factor*this.r, factor*this.g, factor*this.b, this.a)
+  }
+
+  toStyle(): string {
+    return `rgba(
+      `+` ${Math.floor(this.r*255)}, 
+      `+` ${Math.floor(this.g*255)},
+      `+` ${Math.floor(this.b*255)},
+      `+` ${(this.a)})`
+  }
+}
+
 class Vector2D {
   x: number;
   y: number;
@@ -158,7 +202,7 @@ function rayStep(p1: Vector2D, p2: Vector2D): Vector2D {
   return p3;
 }
 
-type Scene = Array<Array<string | null>>;
+type Scene = Array<Array<Color | null>>;
 
 // check if a point is inside the scene
 function insideScene(scene: Scene, p: Vector2D): boolean {
@@ -220,7 +264,7 @@ function renderMinimap(
     for (let x = 0; x < gridSize.x; ++x) {
       const color = scene[y][x];
       if (color !== null) {
-        ctx.fillStyle = color;
+        ctx.fillStyle = color.toStyle();
         ctx.fillRect(x, y, 1, 1);
       }
     }
@@ -295,7 +339,7 @@ function renderScene(
         const d = Vector2D.fromAngle(player.direction);
         let strip_height = ctx.canvas.height / v.dot(d);
 
-        ctx.fillStyle = color;
+        ctx.fillStyle = color.brightness(1/v.dot(d)).toStyle()
         ctx.fillRect(
           x * strip_width,
           (ctx.canvas.height - strip_height) * 0.5,
@@ -325,6 +369,16 @@ function renderGame(
   renderScene(ctx, player, scene);
   renderMinimap(ctx, player, minimapPosition, minimapSize, scene);
 }
+// define the scene
+const scene = [
+  [null, null,  Color.cyan(),  Color.purple(), null, null, null, null],
+  [null, null,  null,    Color.yellow(),  null, null, null, null],
+  [null, Color.red(), Color.green(), Color.blue(),    null, null, null, null],
+  [null, null,  null,    null,      null, null, null, null],
+  [null, null,  null,    null,      null, null, null, null],
+  [null, null,  null,    null,      null, null, null, null],
+  [null, null,  null,    null,      null, null, null, null],
+];
 
 // immediately call this function when the html element has been rendered
 (() => {
@@ -349,16 +403,6 @@ function renderGame(
   if (ctx === null) throw new Error("2D context is not supported.");
 
   // prettier-ignore
-  // define the scene
-  const scene = [
-    [null, null,  "cyan",  "purple", null, null, null, null],
-    [null, null,  null,    "yellow",  null, null, null, null],
-    [null, "red", "green", "blue",    null, null, null, null],
-    [null, null,  null,    null,      null, null, null, null],
-    [null, null,  null,    null,      null, null, null, null],
-    [null, null,  null,    null,      null, null, null, null],
-    [null, null,  null,    null,      null, null, null, null],
-  ];
 
   // define the player, at its initial start
   const player = new Player(
@@ -413,11 +457,11 @@ function renderGame(
     }
 
     if (turningLeft) {
-      angularVelocity -= Math.PI*.75;
+      angularVelocity -= Math.PI*.65;
     }
 
     if (turningRight) {
-      angularVelocity += Math.PI*.75;
+      angularVelocity += Math.PI*.65;
     }
 
     player.direction = player.direction + angularVelocity*deltaTime;

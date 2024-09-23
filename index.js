@@ -7,6 +7,42 @@ const FOV = Math.PI * 0.5; // field of view in radians (90 degrees)
 const SCREEN_WIDTH = 200; // number of vertical strips to render
 const PLAYER_STEP_LEN = 0.5; // player movement step length
 const PLAYER_SPEED = 2;
+class Color {
+    constructor(r, g, b, a) {
+        this.r = r;
+        this.g = g;
+        this.b = b;
+        this.a = a;
+    }
+    static red() {
+        return new Color(1, 0, 0, 1);
+    }
+    static green() {
+        return new Color(0, 1, 0, 1);
+    }
+    static blue() {
+        return new Color(0, 0, 1, 1);
+    }
+    static yellow() {
+        return new Color(1, 1, 0, 1);
+    }
+    static purple() {
+        return new Color(1, 0, 1, 1);
+    }
+    static cyan() {
+        return new Color(0, 1, 1, 1);
+    }
+    brightness(factor) {
+        return new Color(factor * this.r, factor * this.g, factor * this.b, this.a);
+    }
+    toStyle() {
+        return `rgba(
+      ` + ` ${Math.floor(this.r * 255)}, 
+      ` + ` ${Math.floor(this.g * 255)},
+      ` + ` ${Math.floor(this.b * 255)},
+      ` + ` ${(this.a)})`;
+    }
+}
 class Vector2D {
     constructor(x, y) {
         this.x = x;
@@ -166,7 +202,7 @@ function renderMinimap(ctx, player, position, size, scene) {
         for (let x = 0; x < gridSize.x; ++x) {
             const color = scene[y][x];
             if (color !== null) {
-                ctx.fillStyle = color;
+                ctx.fillStyle = color.toStyle();
                 ctx.fillRect(x, y, 1, 1);
             }
         }
@@ -218,7 +254,7 @@ function renderScene(ctx, player, scene) {
                 const v = p.subtract(player.position);
                 const d = Vector2D.fromAngle(player.direction);
                 let strip_height = ctx.canvas.height / v.dot(d);
-                ctx.fillStyle = color;
+                ctx.fillStyle = color.brightness(1 / v.dot(d)).toStyle();
                 ctx.fillRect(x * strip_width, (ctx.canvas.height - strip_height) * 0.5, strip_width, strip_height);
             }
         }
@@ -236,6 +272,16 @@ function renderGame(ctx, player, scene) {
     renderScene(ctx, player, scene);
     renderMinimap(ctx, player, minimapPosition, minimapSize, scene);
 }
+// define the scene
+const scene = [
+    [null, null, Color.cyan(), Color.purple(), null, null, null, null],
+    [null, null, null, Color.yellow(), null, null, null, null],
+    [null, Color.red(), Color.green(), Color.blue(), null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+];
 // immediately call this function when the html element has been rendered
 (() => {
     const game = document.getElementById("game");
@@ -255,16 +301,6 @@ function renderGame(ctx, player, scene) {
     if (ctx === null)
         throw new Error("2D context is not supported.");
     // prettier-ignore
-    // define the scene
-    const scene = [
-        [null, null, "cyan", "purple", null, null, null, null],
-        [null, null, null, "yellow", null, null, null, null],
-        [null, "red", "green", "blue", null, null, null, null],
-        [null, null, null, null, null, null, null, null],
-        [null, null, null, null, null, null, null, null],
-        [null, null, null, null, null, null, null, null],
-        [null, null, null, null, null, null, null, null],
-    ];
     // define the player, at its initial start
     const player = new Player(sceneSize(scene).multiply(new Vector2D(0.63, 0.63)), Math.PI * 1.25);
     let movingForward = false;
@@ -325,10 +361,10 @@ function renderGame(ctx, player, scene) {
                 .scale(PLAYER_SPEED));
         }
         if (turningLeft) {
-            angularVelocity -= Math.PI * .75;
+            angularVelocity -= Math.PI * .65;
         }
         if (turningRight) {
-            angularVelocity += Math.PI * .75;
+            angularVelocity += Math.PI * .65;
         }
         player.direction = player.direction + angularVelocity * deltaTime;
         player.position = player.position.add(velocity.scale(deltaTime));
