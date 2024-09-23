@@ -1,11 +1,12 @@
 "use strict";
 // global constants
 const EPSILON = 1e-6; // small value to avoid floating-point precision issues
-const NEAR_CLIPPING_PLANE = 1; // distance to the near clipping plane
+const NEAR_CLIPPING_PLANE = 0.25; // distance to the near clipping plane
 const FAR_CLIPPING_PLANE = 10; // distance to the far clipping plane
 const FOV = Math.PI * 0.5; // field of view in radians (90 degrees)
 const SCREEN_WIDTH = 200; // number of vertical strips to render
 const PLAYER_STEP_LEN = 0.5; // player movement step length
+const PLAYER_SPEED = 2;
 class Vector2D {
     constructor(x, y) {
         this.x = x;
@@ -35,14 +36,14 @@ class Vector2D {
     length() {
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
+    sqrLength() {
+        return this.x * this.x + this.y * this.y;
+    }
     scale(value) {
         return new Vector2D(this.x * value, this.y * value);
     }
     rotate90() {
         return new Vector2D(-this.y, this.x);
-    }
-    distanceTo(that) {
-        return that.subtract(this).length();
     }
     normalize() {
         const l = this.length();
@@ -53,6 +54,9 @@ class Vector2D {
     // linear interpolation between two vectors
     lerp(that, t) {
         return that.subtract(this).scale(t).add(this);
+    }
+    sqrDistanceTo(that) {
+        return that.subtract(this).sqrLength();
     }
     dot(that) {
         return this.x * that.x + this.y * that.y;
@@ -106,7 +110,7 @@ function rayStep(p1, p2) {
             const y3 = snapToNeighbor(p2.y, delta.y);
             const x3 = (y3 - c) / k;
             const p3temp = new Vector2D(x3, y3);
-            if (p2.distanceTo(p3temp) < p2.distanceTo(p3))
+            if (p2.sqrDistanceTo(p3temp) < p2.sqrDistanceTo(p3))
                 p3 = p3temp;
         }
     }
@@ -125,7 +129,7 @@ function insideScene(scene, p) {
 // cast a ray from p1 to p2 in the scene
 function castRay(scene, p1, p2) {
     let start = p1;
-    while (start.distanceTo(p1) < FAR_CLIPPING_PLANE) {
+    while (start.sqrDistanceTo(p1) < FAR_CLIPPING_PLANE * FAR_CLIPPING_PLANE) {
         // check if the ray (which is denoted by 2 points) is hitting a particular cell
         const c = hittingCell(p1, p2);
         // if you are inside the scene, and this thing is not null only then break
@@ -263,38 +267,77 @@ function renderGame(ctx, player, scene) {
     ];
     // define the player, at its initial start
     const player = new Player(sceneSize(scene).multiply(new Vector2D(0.63, 0.63)), Math.PI * 1.25);
+    let movingForward = false;
+    let movingBackward = false;
+    let turningLeft = false;
+    let turningRight = false;
     // handle keyboard input
-    // prettier-ignore
     window.addEventListener("keydown", (event) => {
         if (!event.repeat) {
             switch (event.code) {
                 case "KeyW":
-                    {
-                        player.position = player.position.add(Vector2D.fromAngle(player.direction).scale(PLAYER_STEP_LEN));
-                        renderGame(ctx, player, scene);
-                    }
-                    break;
-                case "KeyA":
-                    {
-                        player.direction -= Math.PI * 0.1;
-                        renderGame(ctx, player, scene);
-                    }
+                    movingForward = true;
                     break;
                 case "KeyS":
-                    {
-                        player.position = player.position.subtract(Vector2D.fromAngle(player.direction).scale(PLAYER_STEP_LEN));
-                        renderGame(ctx, player, scene);
-                    }
+                    movingBackward = true;
+                    break;
+                case "KeyA":
+                    turningLeft = true;
                     break;
                 case "KeyD":
-                    {
-                        player.direction += Math.PI * 0.1;
-                        renderGame(ctx, player, scene);
-                    }
+                    turningRight = true;
                     break;
             }
         }
     });
+    window.addEventListener("keyup", (event) => {
+        if (!event.repeat) {
+            switch (event.code) {
+                case "KeyW":
+                    movingForward = false;
+                    break;
+                case "KeyS":
+                    movingBackward = false;
+                    break;
+                case "KeyA":
+                    turningLeft = false;
+                    break;
+                case "KeyD":
+                    turningRight = false;
+                    break;
+            }
+        }
+    });
+    let prevTimestamp = 0;
+    const frame = (timestamp) => {
+        const deltaTime = (timestamp - prevTimestamp) / 1000;
+        prevTimestamp = timestamp;
+        let velocity = Vector2D.zero();
+        let angularVelocity = 0.0;
+        if (movingForward) {
+            velocity = velocity
+                .add(Vector2D.fromAngle(player.direction)
+                .scale(PLAYER_SPEED));
+        }
+        if (movingBackward) {
+            velocity = velocity
+                .subtract(Vector2D.fromAngle(player.direction)
+                .scale(PLAYER_SPEED));
+        }
+        if (turningLeft) {
+            angularVelocity -= Math.PI * .75;
+        }
+        if (turningRight) {
+            angularVelocity += Math.PI * .75;
+        }
+        player.direction = player.direction + angularVelocity * deltaTime;
+        player.position = player.position.add(velocity.scale(deltaTime));
+        renderGame(ctx, player, scene);
+        window.requestAnimationFrame(frame);
+    };
+    window.requestAnimationFrame((timestamp) => {
+        prevTimestamp = timestamp;
+        window.requestAnimationFrame(frame);
+    });
     // initial render
-    renderGame(ctx, player, scene);
 })();
