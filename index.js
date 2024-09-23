@@ -124,10 +124,14 @@ function insideScene(scene, p) {
 }
 // cast a ray from p1 to p2 in the scene
 function castRay(scene, p1, p2) {
-    for (;;) {
+    let start = p1;
+    while (start.distanceTo(p1) < FAR_CLIPPING_PLANE) {
+        // check if the ray (which is denoted by 2 points) is hitting a particular cell
         const c = hittingCell(p1, p2);
-        if (!insideScene(scene, c) || scene[c.y][c.x] !== null)
+        // if you are inside the scene, and this thing is not null only then break
+        if (insideScene(scene, c) && scene[c.y][c.x] !== null)
             break;
+        // if you have 2 points p1, p2 find the next point for the ray casted
         const p3 = rayStep(p1, p2);
         p1 = p2;
         p2 = p3;
